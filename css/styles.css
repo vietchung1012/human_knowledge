@@ -114,7 +114,7 @@ main {
 
 #zoom-hint {
   position: absolute;
-  bottom: 10px;
+  bottom: 44px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11px;
@@ -161,8 +161,8 @@ main {
   fill: var(--text-dim);
   font-weight: 600;
 }
-.year-axis text { fill: var(--text-dim); font-size: 10px; }
-.year-axis line, .year-axis path { stroke: var(--border); }
+.axis-tick text { fill: var(--text-dim); font-size: 11px; }
+.axis-tick line { stroke: #5a6472; }
 
 #detail-panel {
   width: 320px;

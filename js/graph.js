@@ -29,7 +29,10 @@ let state = {
 };
 
 let svg, zoomLayer, width, height;
-const MARGIN = { top: 20, right: 40, bottom: 30, left: 160 };
+let axisTickSel = null; // d3 selection of fixed axis-tick <g> elements, repositioned on zoom
+const AXIS_BAR_HEIGHT = 34;
+const MARGIN = { top: 20, right: 40, bottom: 30 + AXIS_BAR_HEIGHT, left: 160 };
+const TICK_YEARS = [-50000, -1000, 0, 500, 1000, 1300, 1500, 1650, 1800, 1850, 1900, 1930, 1960, 1990, 2026];
 
 // ---------- utils ----------
 
@@ -239,21 +242,53 @@ function render() {
       .attr("stroke-width", 1);
   });
 
-  // year axis (approximate ticks; denser in 1000-2026 since that segment gets more width)
-  const tickYears = [-50000, -10000, -3000, -1000, -500, 0, 500, 1000, 1300, 1500, 1650, 1750, 1800, 1850, 1900, 1930, 1960, 1990, 2026];
-  const axisG = defsAndStatic.append("g").attr("class", "year-axis");
-  tickYears.forEach((y) => {
-    const x = layout.xScale(y);
-    if (x < MARGIN.left - 5 || x > width - 5) return;
-    axisG.append("line")
-      .attr("x1", x).attr("x2", x)
-      .attr("y1", MARGIN.top).attr("y2", height - MARGIN.bottom)
-      .attr("stroke", "#1a1f26").attr("stroke-width", 1);
-    axisG.append("text")
-      .attr("x", x).attr("y", height - MARGIN.bottom + 16)
-      .attr("text-anchor", "middle")
-      .text(y < 0 ? Math.abs(y) + " TCN" : String(y));
-  });
+  // Dữ liệu các mốc năm, tính sẵn vị trí x gốc (ứng với transform = identity).
+  const axisTickData = TICK_YEARS.map((y) => ({ year: y, baseX: layout.xScale(y) }));
+
+  // Gridline dọc theo mốc năm — đặt BÊN TRONG zoomLayer (thêm bên dưới, sau khi
+  // zoomLayer đã append) để chúng tự động pan/zoom cùng node & cạnh, luôn khớp
+  // chính xác vị trí thời gian dù kéo/zoom thế nào — đây là phần vá lỗi trục cũ
+  // (trước đây gridline đứng yên, lệch khỏi node ngay khi kéo/zoom).
+
+  // Thanh trục thời gian CỐ ĐỊNH ở đáy khung nhìn (không pan/zoom theo nội dung),
+  // nhưng vị trí từng mốc năm được cập nhật lại mỗi lần zoom (xem hàm updateAxisPositions)
+  // nên luôn khớp chính xác với vị trí node — chỉ cỡ chữ là không đổi để luôn dễ đọc.
+  const axisBarY = height - AXIS_BAR_HEIGHT;
+  const axisBar = defsAndStatic.append("g").attr("class", "axis-bar");
+  axisBar.append("rect")
+    .attr("x", 0).attr("y", axisBarY)
+    .attr("width", width).attr("height", AXIS_BAR_HEIGHT)
+    .attr("fill", "#141820");
+  axisBar.append("line")
+    .attr("x1", 0).attr("x2", width)
+    .attr("y1", axisBarY).attr("y2", axisBarY)
+    .attr("stroke", "#2b323c").attr("stroke-width", 1);
+
+  axisTickSel = axisBar
+    .selectAll("g.axis-tick")
+    .data(axisTickData)
+    .join("g")
+    .attr("class", "axis-tick")
+    .attr("transform", (d) => `translate(${d.baseX},0)`);
+
+  axisTickSel.append("line")
+    .attr("y1", axisBarY).attr("y2", axisBarY + 6)
+    .attr("stroke", "#5a6472").attr("stroke-width", 1);
+  axisTickSel.append("text")
+    .attr("y", axisBarY + 20)
+    .attr("text-anchor", "middle")
+    .text((d) => (d.year < 0 ? Math.abs(d.year) + " TCN" : String(d.year)));
+
+  // Gridline dọc bên trong zoomLayer → tự pan/zoom cùng node, luôn khớp đúng thời gian.
+  zoomLayer
+    .append("g")
+    .attr("class", "gridlines")
+    .selectAll("line")
+    .data(axisTickData)
+    .join("line")
+    .attr("x1", (d) => d.baseX).attr("x2", (d) => d.baseX)
+    .attr("y1", MARGIN.top).attr("y2", axisBarY)
+    .attr("stroke", "#1a1f26").attr("stroke-width", 1);
 
   const visibleNodes = state.nodes.filter((n) => !state.hiddenCategories.has(n.category));
   const visibleIds = new Set(visibleNodes.map((n) => n.id));
@@ -373,6 +408,9 @@ function render() {
     .on("zoom", (event) => {
       zoomLayer.attr("transform", event.transform);
       svg.classed("zoomed-in", event.transform.k > 1.6);
+      if (axisTickSel) {
+        axisTickSel.attr("transform", (d) => `translate(${event.transform.applyX(d.baseX)},0)`);
+      }
     });
   svg.call(zoom);
 
@@ -621,7 +659,25 @@ document.getElementById("btn-reset").addEventListener("click", () => {
 
 // ---------- resize ----------
 
-window.addEventListener("resize", () => render());
+// ResizeObserver (not just window "resize") catches every size change of the
+// graph container — including a reflow caused by web fonts finishing their
+// load shortly after first paint, which a plain window-resize listener misses.
+// Without this, the bottom axis bar could be positioned using a container
+// height measured just before that reflow, landing a few px outside the
+// visible SVG.
+let resizeRenderQueued = false;
+function scheduleResizeRender() {
+  if (resizeRenderQueued) return;
+  resizeRenderQueued = true;
+  requestAnimationFrame(() => {
+    resizeRenderQueued = false;
+    render();
+  });
+}
+new ResizeObserver(scheduleResizeRender).observe(document.getElementById("graph-container"));
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(scheduleResizeRender);
+}
 
 // ---------- init ----------
 
