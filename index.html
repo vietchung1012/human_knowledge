@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bản đồ Kiến thức Nhân loại</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header id="app-header">
+    <div class="header-top">
+      <h1>🗺️ Bản đồ Kiến thức Nhân loại</h1>
+      <div class="header-actions">
+        <button id="btn-add-node" class="btn btn-primary">+ Thêm sự kiện</button>
+        <button id="btn-export" class="btn">Xuất dữ liệu</button>
+        <button id="btn-reset" class="btn btn-ghost" title="Xoá các sự kiện tự thêm (lưu trong trình duyệt này)">Đặt lại</button>
+      </div>
+    </div>
+    <div class="header-controls">
+      <input id="search-box" type="text" placeholder="Tìm sự kiện, khái niệm, nhân vật..." autocomplete="off">
+      <div id="legend"></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="graph-container">
+      <svg id="graph-svg"></svg>
+      <div id="zoom-hint">Kéo để di chuyển · Cuộn để zoom (zoom gần sẽ hiện tên) · Di chuột qua 1 chấm để xem tên · Bấm để truy nguồn gốc</div>
+    </div>
+
+    <aside id="detail-panel" class="hidden">
+      <button id="btn-close-panel" class="btn-close">&times;</button>
+      <div id="detail-content"></div>
+    </aside>
+  </main>
+
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-add" class="modal">
+      <h2>Thêm sự kiện / khái niệm mới</h2>
+      <label>Tên sự kiện *<input id="input-name" type="text" required></label>
+      <label>Lĩnh vực *
+        <select id="input-category" required></select>
+      </label>
+      <label>Năm (số âm = TCN, ví dụ -500) *<input id="input-year" type="number" required></label>
+      <label>Mô tả ngắn<textarea id="input-desc" rows="3"></textarea></label>
+      <label>Nguồn gốc / chịu ảnh hưởng từ (có thể chọn nhiều)
+        <input id="input-origin-search" type="text" placeholder="Gõ để tìm node đã có...">
+        <div id="origin-results"></div>
+        <div id="origin-selected"></div>
+      </label>
+      <div class="modal-actions">
+        <button id="btn-cancel-add" class="btn btn-ghost">Hủy</button>
+        <button id="btn-save-add" class="btn btn-primary">Lưu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-export-overlay" class="hidden">
+    <div id="modal-export" class="modal">
+      <h2>Xuất dữ liệu (bao gồm các node bạn đã thêm)</h2>
+      <p class="hint">Sao chép nội dung dưới đây, dán vào <code>data/knowledge-map.json</code> trên GitHub rồi commit để lưu vĩnh viễn — vì đây là trang tĩnh, thay đổi chỉ lưu tạm trong trình duyệt (localStorage) cho đến khi bạn làm bước này.</p>
+      <textarea id="export-textarea" readonly></textarea>
+      <div class="modal-actions">
+        <button id="btn-copy-export" class="btn btn-primary">Sao chép</button>
+        <button id="btn-download-export" class="btn">Tải file .json</button>
+        <button id="btn-close-export" class="btn btn-ghost">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/lib/d3.v7.min.js"></script>
+  <script src="js/graph.js"></script>
+</body>
+</html>
