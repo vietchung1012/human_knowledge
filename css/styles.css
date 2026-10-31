@@ -144,11 +144,12 @@ main {
 .edge-path {
   fill: none;
   stroke: #3a4250;
-  stroke-width: 1.2px;
+  stroke-width: 1px;
+  opacity: 0.4;
   transition: opacity 0.2s, stroke 0.2s, stroke-width 0.2s;
 }
-.edge-path.highlight-ancestor { stroke: #ffca28; stroke-width: 2.2px; }
-.edge-path.highlight-descendant { stroke: #66bb6a; stroke-width: 2.2px; }
+.edge-path.highlight-ancestor { stroke: #ffca28; stroke-width: 2.2px; opacity: 1; }
+.edge-path.highlight-descendant { stroke: #66bb6a; stroke-width: 2.2px; opacity: 1; }
 .node-circle.highlight-ancestor { stroke: #ffca28; stroke-width: 2.5px; }
 .node-circle.highlight-descendant { stroke: #66bb6a; stroke-width: 2.5px; }
 .node-circle.highlight-selected { stroke: #fff; stroke-width: 3px; }

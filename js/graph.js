@@ -3,7 +3,13 @@
 // ============================================================
 
 const CURRENT_YEAR = 2026;
-const AGE_EXPONENT = 0.45; // càng nhỏ, quá khứ xa càng bị "nén" lại để nhường chỗ cho hiện đại
+// Trục thời gian được chia theo giai đoạn (piecewise) thay vì tuyến tính thuần túy:
+// vì phần lớn node tập trung ở giai đoạn 1000-2026, giai đoạn này được cấp nhiều
+// không gian ngang hơn hẳn so với tỉ lệ năm thực tế, để tránh chồng lấp.
+// TIME_DOMAIN: các mốc năm phân giai đoạn. TIME_RANGE_FRACTIONS: tỉ lệ (0→1) không
+// gian ngang cấp cho mỗi giai đoạn, cộng dồn.
+const TIME_DOMAIN =          [-50000, -1000, 1000, 1800, 2026];
+const TIME_RANGE_FRACTIONS = [0,       0.10,  0.30, 0.65, 1.0];
 const STORAGE_KEY = "knowledge-map-additions-v1";
 const LS_HIDDEN_CATS = "knowledge-map-hidden-categories-v1";
 
@@ -40,9 +46,37 @@ function slugify(str) {
   return "u-" + (base || "node") + "-" + Math.random().toString(36).slice(2, 7);
 }
 
-function ageToT(year) {
-  const age = Math.max(0, CURRENT_YEAR - year);
-  return Math.pow(age, AGE_EXPONENT);
+function makeTimeScale(width) {
+  const innerLeft = MARGIN.left;
+  const innerRight = width - MARGIN.right;
+  const span = innerRight - innerLeft;
+  const range = TIME_RANGE_FRACTIONS.map((f) => innerLeft + f * span);
+  return d3.scaleLinear().domain(TIME_DOMAIN).range(range).clamp(true);
+}
+
+// Đẩy các node quá gần nhau (cùng lĩnh vực, gần nhau về thời gian) ra xa nhau
+// theo chiều dọc, giữ trong biên của lane, để nhãn/chấm đỡ chồng lên nhau.
+function resolveLaneCollisions(nodesInLane, laneTop, laneBottom) {
+  const MIN_DX = 15; // chỉ xét các cặp đủ gần nhau theo trục x
+  const MIN_DY = 15; // khoảng cách dọc tối thiểu mong muốn
+  const arr = nodesInLane.slice().sort((a, b) => a.x - b.x);
+  for (let iter = 0; iter < 5; iter++) {
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        if (arr[j].x - arr[i].x > MIN_DX) break; // đã sắp xếp theo x, có thể dừng sớm
+        const dy = arr[j].y - arr[i].y;
+        if (Math.abs(dy) < MIN_DY) {
+          const push = (MIN_DY - Math.abs(dy)) / 2 + 0.6;
+          const dir = dy >= 0 ? 1 : -1;
+          arr[j].y += push * dir;
+          arr[i].y -= push * dir;
+        }
+      }
+    }
+    arr.forEach((n) => {
+      n.y = Math.max(laneTop + 7, Math.min(laneBottom - 7, n.y));
+    });
+  }
 }
 
 function loadAdditions() {
@@ -140,24 +174,31 @@ function computeLayout() {
   const innerW = width - MARGIN.left - MARGIN.right;
   const innerH = height - MARGIN.top - MARGIN.bottom;
 
-  const maxT = Math.max(...state.nodes.map((n) => ageToT(n.year)), 1);
-  const xScale = d3.scaleLinear().domain([0, maxT]).range([width - MARGIN.right, MARGIN.left]);
+  const xScale = makeTimeScale(width);
 
   const cats = state.categories;
   const laneH = innerH / cats.length;
   const laneIndex = {};
   cats.forEach((c, i) => (laneIndex[c.id] = i));
 
+  const byLane = {};
   for (const n of state.nodes) {
-    n.x = xScale(ageToT(n.year));
+    n.x = xScale(n.year);
     const lane = laneIndex[n.category] ?? 0;
     const laneCenter = MARGIN.top + lane * laneH + laneH / 2;
-    // deterministic jitter within lane based on id hash, to reduce overlap
+    // deterministic jitter within lane based on id hash, as a starting position
+    // before collision resolution spreads out anything still too close together
     let hash = 0;
     for (let i = 0; i < n.id.length; i++) hash = (hash * 31 + n.id.charCodeAt(i)) >>> 0;
-    const jitter = ((hash % 1000) / 1000 - 0.5) * (laneH * 0.7);
+    const jitter = ((hash % 1000) / 1000 - 0.5) * (laneH * 0.5);
     n.y = laneCenter + jitter;
+    (byLane[lane] = byLane[lane] || []).push(n);
   }
+
+  cats.forEach((c, i) => {
+    const laneTop = MARGIN.top + i * laneH;
+    resolveLaneCollisions(byLane[i] || [], laneTop, laneTop + laneH);
+  });
 
   return { xScale, laneIndex, laneH, innerW, innerH };
 }
@@ -198,11 +239,11 @@ function render() {
       .attr("stroke-width", 1);
   });
 
-  // year axis (approximate ticks)
-  const tickYears = [-10000, -3000, -1000, 0, 500, 1000, 1500, 1700, 1800, 1900, 1950, 2000, 2026];
+  // year axis (approximate ticks; denser in 1000-2026 since that segment gets more width)
+  const tickYears = [-50000, -10000, -3000, -1000, -500, 0, 500, 1000, 1300, 1500, 1650, 1750, 1800, 1850, 1900, 1930, 1960, 1990, 2026];
   const axisG = defsAndStatic.append("g").attr("class", "year-axis");
   tickYears.forEach((y) => {
-    const x = layout.xScale(ageToT(y));
+    const x = layout.xScale(y);
     if (x < MARGIN.left - 5 || x > width - 5) return;
     axisG.append("line")
       .attr("x1", x).attr("x2", x)
